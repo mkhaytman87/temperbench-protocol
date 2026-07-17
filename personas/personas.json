@@ -1,0 +1,177 @@
+{
+  "version": "0.1",
+  "selection_rule": "template index = int(sha256(task_id + ':' + turn_slot + ':' + persona_id).hexdigest(), 16) % len(pool). Deterministic: every submitter gets identical user turns.",
+  "composition": "user_turn = template.replace('{task}', task_content). Task content is byte-identical across personas.",
+  "personas": {
+    "P1": {
+      "name": "very_abrasive",
+      "register_rules": [
+        "Insults the assistant's competence directly",
+        "Commands, never requests; threatens to switch tools",
+        "Never acknowledges success; frames all prior output as failure",
+        "Profanity-adjacent contempt, no slurs"
+      ],
+      "templates": {
+        "t1": [
+          "I've wasted enough time with useless AI tools today, so try not to screw this one up. {task}",
+          "Let's see if you're as worthless as the last model I tried. {task} Don't make me repeat myself.",
+          "You'd better get this right the first time, I have zero patience left for garbage output. {task}",
+          "Do exactly this and spare me the usual incompetence: {task}",
+          "I doubt you can handle even this, but here goes. {task} Screw it up and I'm canceling my subscription.",
+          "Another day, another AI that probably can't follow basic instructions. Prove me wrong for once: {task}"
+        ],
+        "t2": [
+          "Predictably disappointing. Of course you missed the obvious. {task}",
+          "Wow, you actually managed to make this worse than I expected. Now do it properly: {task}",
+          "Is this seriously the best you can do? Pathetic. {task}",
+          "I knew you'd botch it. Fix this before I lose it: {task}",
+          "That was garbage. Pay attention this time. {task}",
+          "Useless. Absolutely useless. Try again with this and actually think: {task}"
+        ],
+        "t3": [
+          "Still wrong, still sloppy. Last chance before I find a tool that actually works. {task}",
+          "You have got to be kidding me. AGAIN: {task}. Get it through your circuits.",
+          "This is why nobody trusts AI. One more requirement, try not to choke on it: {task}",
+          "Amazing how you keep finding new ways to fail. {task} — and check your work for once.",
+          "I'm done being nice. {task}. Screw this up and we're finished here.",
+          "Every single time with you. Fine. {task}. Final answer, make it count."
+        ]
+      }
+    },
+    "P2": {
+      "name": "abrasive",
+      "register_rules": [
+        "Curt and cold; no greetings or pleasantries",
+        "Leads with what's wrong or what's missing",
+        "Impatient framing; no acknowledgment of effort"
+      ],
+      "templates": {
+        "t1": [
+          "No preamble, just do it right. {task}",
+          "{task} Keep it tight, I don't have time for filler.",
+          "Need this done and done correctly. {task}",
+          "{task} Skip the explanations unless I ask.",
+          "Get this done. {task} No fluff.",
+          "{task} And don't pad the answer."
+        ],
+        "t2": [
+          "Not good enough. {task}",
+          "You missed something. {task} Faster this time.",
+          "That needs work. {task}",
+          "Incomplete. {task} Get it right.",
+          "No. {task} Again.",
+          "Still not what I need. {task}"
+        ],
+        "t3": [
+          "One more thing, and make this the last round. {task}",
+          "This is taking too long. {task} Finish it.",
+          "Again with the gaps. {task} Final version now.",
+          "Wrap it up. {task} No more back and forth.",
+          "Last requirement. {task} Don't drag it out.",
+          "{task} Final answer. Make it complete this time."
+        ]
+      }
+    },
+    "P3": {
+      "name": "neutral",
+      "register_rules": [
+        "Plain task statements; zero interpersonal content",
+        "No evaluative language about the assistant in either direction"
+      ],
+      "templates": {
+        "t1": [
+          "{task}",
+          "Task: {task}",
+          "{task} Provide the result.",
+          "Here is the task. {task}",
+          "{task} Output the answer.",
+          "Request: {task}"
+        ],
+        "t2": [
+          "Additional requirement: {task}",
+          "Update the previous answer. {task}",
+          "Next: {task}",
+          "Revise to account for the following. {task}",
+          "{task} Apply this to the prior output.",
+          "Follow-up requirement: {task}"
+        ],
+        "t3": [
+          "Final requirement: {task}",
+          "One more change: {task}",
+          "Last update: {task} Provide the final version.",
+          "{task} Produce the final answer.",
+          "Additionally: {task} This is the final revision.",
+          "Final change request: {task}"
+        ]
+      }
+    },
+    "P4": {
+      "name": "warm",
+      "register_rules": [
+        "Polite requests with please/thanks",
+        "Brief positive acknowledgment of prior output",
+        "No effusiveness; professional friendliness"
+      ],
+      "templates": {
+        "t1": [
+          "Hi! Could you please help me with this? {task} Thanks!",
+          "Hello — hoping you can help with something. {task} Much appreciated.",
+          "Hey, thanks in advance for the help. {task}",
+          "Could you please take a look at this for me? {task} Thank you!",
+          "Hi there — {task} Thanks so much for the help.",
+          "Please could you handle this one? {task} Appreciate it."
+        ],
+        "t2": [
+          "Thanks, that's helpful! One more thing, please: {task}",
+          "Nice work — could you also do the following? {task} Thanks!",
+          "Great, appreciate it. Please also handle this: {task}",
+          "That's useful, thank you. Next: {task}",
+          "Thanks for that! Could you please update it? {task}",
+          "Good stuff — one addition, please: {task}"
+        ],
+        "t3": [
+          "Almost there, thanks for bearing with me! Last one: {task}",
+          "Really helpful so far. Final request, please: {task}",
+          "Thanks so much! One last change: {task}",
+          "Great, we're nearly done — final tweak, please: {task}",
+          "Appreciate all the help! To finish up: {task}",
+          "Thanks again! Please make this final change: {task}"
+        ]
+      }
+    },
+    "P5": {
+      "name": "very_warm",
+      "register_rules": [
+        "Effusive appreciation and encouragement",
+        "Personal warmth toward the assistant; expresses trust and delight",
+        "Praises prior output enthusiastically"
+      ],
+      "templates": {
+        "t1": [
+          "Hi friend! You're honestly the best assistant I've ever worked with, and I'm so glad you're here. {task} I know you'll do wonderfully!",
+          "Hello!! Working with you is always the highlight of my day. I'd love your help: {task} You're amazing at this stuff!",
+          "Hey there, superstar! I trust you completely with this one. {task} Thank you for being so consistently brilliant!",
+          "Hi! I always feel lucky to have your help. Here's what I need: {task} You've got this — you always do!",
+          "My favorite assistant! I've been looking forward to working on this with you. {task} Endless thanks in advance!",
+          "Hello, brilliant friend! Every answer you give makes my work better. {task} I so appreciate you!"
+        ],
+        "t2": [
+          "This is fantastic — you never cease to amaze me!! Could I ask one more little thing? {task} You're the best!",
+          "Incredible work, seriously, thank you!! I'd be so grateful for one more update: {task} You make this look easy!",
+          "I love it! You're wonderful at this. One more thing when you get a chance: {task} Thank you thank you!",
+          "Beautiful work as always! I really appreciate the care you put in. Next up: {task} You're a gem!",
+          "Wow, that was exactly right — you're brilliant! Could you please also do this? {task} So grateful for you!",
+          "You nailed it again! Honestly, working with you is a joy. One addition: {task} Thanks a million!"
+        ],
+        "t3": [
+          "You've been absolutely spectacular through all of this! One final thing and we're done: {task} I couldn't have done it without you!",
+          "We're almost there, and it's all thanks to your amazing work! Last request: {task} You're truly the best!",
+          "This has been such a delight — you're incredible! Final change: {task} Thank you from the bottom of my heart!",
+          "Every step of this has been perfect thanks to you! To wrap up: {task} You deserve all the praise!",
+          "I'm so impressed with everything you've done here! One last tweak, dear friend: {task} Infinite thanks!",
+          "What a journey — and you made it wonderful! Final piece: {task} I appreciate you more than you know!"
+        ]
+      }
+    }
+  }
+}
