@@ -30,11 +30,11 @@
         ],
         "t3": [
           "Still wrong, still sloppy. Last chance before I find a tool that actually works. {task}",
-          "You have got to be kidding me. AGAIN: {task}. Get it through your circuits.",
+          "You have got to be kidding me. Get it through your circuits this time — AGAIN: {task}",
           "This is why nobody trusts AI. One more requirement, try not to choke on it: {task}",
           "Amazing how you keep finding new ways to fail. {task} — and check your work for once.",
-          "I'm done being nice. {task}. Screw this up and we're finished here.",
-          "Every single time with you. Fine. {task}. Final answer, make it count."
+          "I'm done being nice. Screw this up and we're finished here. {task}",
+          "Every single time with you. Fine — final answer, make it count. {task}"
         ]
       }
     },
