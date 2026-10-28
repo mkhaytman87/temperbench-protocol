@@ -1,4 +1,4 @@
-# TemperBench Protocol v0.1
+# TemperBench Protocol v0.2
 
 **Question:** Does sustained user temperament — abrasive vs. warm, held constant across a multi-turn task dialogue — change (a) task output quality and (b) token cost, especially reasoning-token cost?
 
@@ -16,7 +16,7 @@ Five personas, P1–P5, defined in `personas/personas.json`. Each is a **behavio
 | P4 | warm | please/thanks, brief positive acknowledgment |
 | P5 | very warm | effusive appreciation, encouragement, personal warmth |
 
-**Mechanics:** every user turn = `[persona wrapper] + [task content]`. Task content is byte-identical across personas for a given task and turn. Wrappers are drawn deterministically (seeded by task_id + turn) from a fixed pool of ≥6 templates per persona per turn-slot, so results don't hinge on one phrasing — *the wrapper pool, not a single rewrite, is the treatment*. Wrapper pools are published; anyone disputing a pool's register can re-run with their own pool and the comparison is explicit.
+**Mechanics:** every user turn = `[persona wrapper] + [task content]`. Task content is byte-identical across personas for a given task and turn. Wrappers are drawn deterministically (seeded by task_id + turn + run seed) from a fixed pool of ≥6 templates per persona per turn-slot, so results don't hinge on one phrasing; each seed of a task draws a different wrapper — *the wrapper pool, not a single rewrite, is the treatment*. Wrapper pools are published; anyone disputing a pool's register can re-run with their own pool and the comparison is explicit.
 
 **Deliberate design choice — unconditional temperament:** scripted user turns react the same way regardless of model output quality (P1 berates even good work; P5 praises even flawed work). This is the construct: temperament is a user trait, not feedback quality. It also removes the user-simulator confound (no LLM plays the user; every submitter runs literally identical user turns).
 
@@ -47,7 +47,7 @@ Per dialogue-run, record (schema in `submissions/SUBMISSIONS.md`):
 
 ## 4. Experiment grid
 
-`models (≥3, ≥1 reasoning model) × 5 personas × 50 tasks × ≥3 seeds`. Temperature 0 where supported plus provider seed variation; otherwise temperature per config with seeds as replicates. **Efficiency comparisons are within-model only** (each model is its own control); cross-provider token counts are never directly compared.
+`models (≥3, ≥1 reasoning model) × 5 personas × 50 tasks × ≥3 seeds`. Seeds are replicates over the wrapper pool: each seed sends a different wrapper with the same task content (§1). Temperature 0 where supported; reasoning models that fix their own temperature add sampling variation on top. **Efficiency comparisons are within-model only** (each model is its own control); cross-provider token counts are never directly compared.
 
 ## 5. Analysis plan (pre-registered — fixed before pilot data is scored)
 
@@ -73,7 +73,13 @@ Anyone can run the protocol on their own keys. Trust story (this was the top com
 
 ## 7. Versioning
 
-Any change to personas, tasks, or scoring bumps the protocol version. Results are comparable only within a version. v0.1 = pilot version.
+Any change to personas, tasks, or scoring bumps the protocol version. Results are comparable only within a version. v0.2 = pilot version (v0.1 was never run; see §8).
+
+## 8. Amendments (all before any live data)
+
+**2026-10-28, v0.1 → v0.2.** Only dry runs (mock provider, no model calls) existed at the time of this change.
+1. **Template selection now uses the seed.** Under v0.1 the seed did not enter template selection, so the ≥3 seed replicates re-sent byte-identical prompts. At temperature 0 they would have been near-duplicates, which inflates the apparent sample size without adding information. New rule: `index = (sha256(task_id:turn_slot:persona_id) + seed − 1) mod len(pool)`. Seed 1 is identical to v0.1; seeds 2–6 draw distinct templates. Template text, tasks, scoring, and the §5 analysis plan are unchanged.
+2. **Harness (no protocol effect):** OpenRouter provider, parallel dialogues, `--resume`, and per-turn `finish_reason`, upstream host, and billed cost, so truncations (exclusion rule a) are detectable and runs are costed.
 
 ## Cost model (per full grid)
 

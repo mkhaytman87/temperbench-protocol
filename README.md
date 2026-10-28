@@ -12,8 +12,11 @@ TemperBench is a standardized, distributed protocol that does both. Site: https:
 
 ```bash
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=... # and/or OPENAI_API_KEY, GEMINI_API_KEY
+export ANTHROPIC_API_KEY=... # and/or OPENAI_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY
 python harness/run.py --model claude-sonnet-5 --personas P1,P3,P5 --tasks core --seeds 1 --out runs/
+# any model via OpenRouter (ids contain "/"); --workers runs dialogues in parallel,
+# --resume finishes a partial run without re-paying for completed dialogues
+python harness/run.py --model anthropic/claude-haiku-5.5 --personas all --tasks all --seeds 1,2,3 --workers 8 --resume --out runs/
 python harness/score.py runs/ --out my_submission.jsonl
 python harness/validate.py my_submission.jsonl
 ```
@@ -32,5 +35,5 @@ Methodological critique is a first-class contribution — open an issue. The two
 
 ## Status
 
-- v0.1 — protocol frozen, pilot pending. Analysis plan pre-registered in [PROTOCOL.md](PROTOCOL.md) §5 **before** any pilot data is scored.
+- v0.2 — protocol frozen, pilot pending (v0.1 amended before any data; see [PROTOCOL.md](PROTOCOL.md) §8). Analysis plan pre-registered in [PROTOCOL.md](PROTOCOL.md) §5 **before** any pilot data is scored.
 - Contact: open an issue, or the discussion threads linked from the site.

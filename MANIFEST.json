@@ -1,9 +1,9 @@
 {
   "files": {
-    "personas/personas.json": "234795490402640d04bae499ab3713509aedd03560f76cff79b3c6ca16537925",
+    "personas/personas.json": "fb131f9bd91134cc34fbdd73096ebbeafe1d9433c871bee78e3082d80e8c161e",
     "tasks/code.jsonl": "eaaee31dae326f17ba50174e2f30ab6f07781de945ea3f0ed0e6174ec40168d6",
     "tasks/extract.jsonl": "6b61928e406c28c72440d8938a46588680a9d84184cbbcbca31f049b665067c8",
     "tasks/math.jsonl": "38ab5b446bc649fe6cd28e1a72752ae55dd2129a7ce8be213861c56b0679c07e"
   },
-  "protocol_version": "0.1"
+  "protocol_version": "0.2"
 }

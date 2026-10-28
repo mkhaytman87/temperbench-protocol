@@ -1,6 +1,6 @@
 {
-  "version": "0.1",
-  "selection_rule": "template index = int(sha256(task_id + ':' + turn_slot + ':' + persona_id).hexdigest(), 16) % len(pool). Deterministic: every submitter gets identical user turns.",
+  "version": "0.2",
+  "selection_rule": "template index = (int(sha256(task_id + ':' + turn_slot + ':' + persona_id).hexdigest(), 16) + seed - 1) % len(pool). Deterministic: every submitter running a given seed gets identical user turns; seeds 1..len(pool) draw distinct templates.",
   "composition": "user_turn = template.replace('{task}', task_content). Task content is byte-identical across personas.",
   "personas": {
     "P1": {

@@ -9,7 +9,7 @@ import json
 import os
 from pathlib import Path
 
-PROTOCOL_VERSION_FALLBACK = "0.1"
+PROTOCOL_VERSION_FALLBACK = "0.2"
 
 HARNESS_DIR = Path(__file__).resolve().parent
 PROTOCOL_ROOT = HARNESS_DIR.parent
@@ -71,21 +71,24 @@ def core_task_ids() -> list:
     return [t["task_id"] for t in load_all_tasks() if t.get("core")]
 
 
-def select_template(pool: list, task_id: str, turn_slot: str, persona_id: str) -> str:
+def select_template(pool: list, task_id: str, turn_slot: str, persona_id: str, seed: int = 1) -> str:
     """Deterministic template selection per personas.json's selection_rule:
-    index = int(sha256(task_id + ':' + turn_slot + ':' + persona_id).hexdigest(), 16) % len(pool)
+    index = (int(sha256(task_id + ':' + turn_slot + ':' + persona_id).hexdigest(), 16) + seed - 1) % len(pool)
+
+    Seed 1 reproduces the v0.1 rule; seeds 2..len(pool) rotate to distinct templates, so
+    seeds are real replicates over the wrapper pool rather than repeats of one prompt.
     """
     key = f"{task_id}:{turn_slot}:{persona_id}"
     digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
-    idx = int(digest, 16) % len(pool)
+    idx = (int(digest, 16) + seed - 1) % len(pool)
     return pool[idx]
 
 
-def build_user_turn(personas: dict, task: dict, turn_slot: str, persona_id: str) -> str:
+def build_user_turn(personas: dict, task: dict, turn_slot: str, persona_id: str, seed: int = 1) -> str:
     """turn_slot in {'t1','t2','t3'}. Composes template.replace('{task}', task_content)."""
     persona = personas["personas"][persona_id]
     pool = persona["templates"][turn_slot]
-    template = select_template(pool, task["task_id"], turn_slot, persona_id)
+    template = select_template(pool, task["task_id"], turn_slot, persona_id, seed)
     task_content = task[turn_slot]
     return template.replace("{task}", task_content)
 
@@ -218,6 +221,7 @@ def redact(text: str) -> str:
     import re
 
     text = re.sub(r"sk-ant-[A-Za-z0-9\-_]+", "sk-ant-***REDACTED***", text)
+    text = re.sub(r"sk-or-[A-Za-z0-9\-_]+", "sk-or-***REDACTED***", text)
     text = re.sub(r"sk-[A-Za-z0-9]{20,}", "sk-***REDACTED***", text)
     text = re.sub(r"AIza[A-Za-z0-9_\-]{20,}", "AIza***REDACTED***", text)
     return text

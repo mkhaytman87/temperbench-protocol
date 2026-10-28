@@ -10,8 +10,12 @@ Usage (see README.md):
     python harness/run.py --model claude-sonnet-5 --tasks core --personas P1 --seeds 1 --out runs/ --dry-run
 
 Supports providers: anthropic (Claude Messages API), openai (Chat Completions API),
-google (Gemini generateContent API) — called directly over HTTPS via `requests`, no
+google (Gemini generateContent API), openrouter (OpenAI-compatible gateway; model ids look
+like "anthropic/claude-haiku-5.5") — called directly over HTTPS via `requests`, no
 provider SDKs. Provider is inferred from --model if --provider is not given.
+
+Dialogues run in parallel (--workers); --resume skips dialogues already written, so a
+partial run can be finished without paying for completed dialogues twice.
 
 Never logs API keys. Retries with backoff (max 3 attempts) on HTTP 429 / 5xx.
 """
@@ -22,8 +26,10 @@ import json
 import os
 import platform
 import sys
+import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,7 +41,10 @@ import common  # noqa: E402
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 GEMINI_URL_TMPL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+HARNESS_VERSION = "0.2"
+REQUEST_TIMEOUT_S = 180  # reasoning models can think for well over a minute per turn
 MAX_ATTEMPTS = 3
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
@@ -48,6 +57,8 @@ class ProviderError(RuntimeError):
 
 def infer_provider(model: str) -> str:
     m = model.lower()
+    if "/" in m:
+        return "openrouter"
     if "claude" in m:
         return "anthropic"
     if "gemini" in m:
@@ -56,7 +67,7 @@ def infer_provider(model: str) -> str:
         return "openai"
     raise ProviderError(
         f"Could not infer provider from model name '{model}'. Pass --provider explicitly "
-        f"(anthropic|openai|google)."
+        f"(anthropic|openai|google|openrouter)."
     )
 
 
@@ -64,7 +75,7 @@ def _sleep_backoff(attempt: int) -> None:
     time.sleep(2 ** attempt)  # 1s, 2s, 4s
 
 
-def _post_with_retry(url: str, headers: dict, body: dict, timeout: int = 60) -> requests.Response:
+def _post_with_retry(url: str, headers: dict, body: dict, timeout: int = REQUEST_TIMEOUT_S) -> requests.Response:
     last_exc = None
     for attempt in range(MAX_ATTEMPTS):
         try:
@@ -187,6 +198,55 @@ def call_gemini(model: str, messages: list, temperature: float, max_tokens: int,
     }
 
 
+def call_openrouter(model: str, messages: list, temperature: float, max_tokens: int, seed: int,
+                    api_key: str, reasoning_effort: str | None = None, route: list | None = None) -> dict:
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    body = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "seed": seed,
+    }
+    if reasoning_effort:
+        body["reasoning"] = {"effort": reasoning_effort}
+    if route:
+        # Pin the upstream host. Open-weights models are served by several hosts at
+        # different quantizations; letting the router pick per request would mix hosts
+        # across persona arms.
+        body["provider"] = {"order": route, "allow_fallbacks": False}
+    t0 = time.monotonic()
+    resp = _post_with_retry(OPENROUTER_URL, headers, body)
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    if resp.status_code >= 400:
+        raise ProviderError(f"openrouter API error {resp.status_code}: {common.redact(resp.text[:500])}")
+    data = resp.json()
+    if data.get("error") or not data.get("choices"):
+        raise ProviderError(f"openrouter returned no choices: {common.redact(json.dumps(data)[:500])}")
+    choice = data["choices"][0]
+    content = (choice.get("message") or {}).get("content", "") or ""
+    usage = data.get("usage", {}) or {}
+    reasoning_tokens = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+    return {
+        "content": content,
+        "usage": {
+            "input_tokens": usage.get("prompt_tokens"),
+            "output_tokens": usage.get("completion_tokens"),
+            "reasoning_tokens": reasoning_tokens,
+            "cost_usd": usage.get("cost"),
+        },
+        "latency_ms": latency_ms,
+        "provider_request_id": data.get("id"),
+        # "length" means the turn was truncated (exclusion rule a); with reasoning on,
+        # max_tokens covers reasoning + visible output combined.
+        "finish_reason": choice.get("finish_reason"),
+        "served_by": data.get("provider"),
+    }
+
+
 def call_dry_run(domain: str, entry_point: str | None) -> dict:
     if domain == "code":
         content = (
@@ -207,7 +267,8 @@ def call_dry_run(domain: str, entry_point: str | None) -> dict:
 
 
 def call_provider(provider: str, model: str, messages: list, temperature: float, max_tokens: int,
-                   seed: int, dry_run: bool, domain: str, entry_point: str | None) -> dict:
+                   seed: int, dry_run: bool, domain: str, entry_point: str | None,
+                   reasoning_effort: str | None = None, route: list | None = None) -> dict:
     if dry_run:
         return call_dry_run(domain, entry_point)
     if provider == "anthropic":
@@ -225,6 +286,12 @@ def call_provider(provider: str, model: str, messages: list, temperature: float,
         if not api_key:
             raise ProviderError("GEMINI_API_KEY not set")
         return call_gemini(model, messages, temperature, max_tokens, api_key)
+    if provider == "openrouter":
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            raise ProviderError("OPENROUTER_API_KEY not set")
+        return call_openrouter(model, messages, temperature, max_tokens, seed, api_key,
+                               reasoning_effort, route)
     raise ProviderError(f"unknown provider: {provider}")
 
 
@@ -248,25 +315,30 @@ def sanitize(s: str) -> str:
 
 def run_dialogue(personas_cfg: dict, task: dict, persona_id: str, model: str, provider: str,
                   seed: int, temperature: float, max_tokens: int, dry_run: bool,
-                  manifest_sha256: str, protocol_version: str, submitter: str) -> dict:
+                  manifest_sha256: str, protocol_version: str, submitter: str,
+                  reasoning_effort: str | None = None, route: list | None = None) -> dict:
     domain = task["domain"]
     entry_point = task.get("entry_point")
     canonical_messages = []
     turns = []
     for slot in ("t1", "t2", "t3"):
-        user_text = common.build_user_turn(personas_cfg, task, slot, persona_id)
+        user_text = common.build_user_turn(personas_cfg, task, slot, persona_id, seed)
         turns.append({"role": "user", "content": user_text})
         canonical_messages.append({"role": "user", "content": user_text})
 
         result = call_provider(provider, model, canonical_messages, temperature, max_tokens,
-                                seed, dry_run, domain, entry_point)
-        turns.append({
+                                seed, dry_run, domain, entry_point, reasoning_effort, route)
+        turn = {
             "role": "assistant",
             "content": result["content"],
             "usage": result["usage"],
             "latency_ms": result["latency_ms"],
             "provider_request_id": result["provider_request_id"],
-        })
+        }
+        for key in ("finish_reason", "served_by"):
+            if result.get(key) is not None:
+                turn[key] = result[key]
+        turns.append(turn)
         canonical_messages.append({"role": "assistant", "content": result["content"]})
 
     return {
@@ -283,14 +355,15 @@ def run_dialogue(personas_cfg: dict, task: dict, persona_id: str, model: str, pr
         "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "turns": turns,
         "scores": None,
-        "env": {"harness_version": "0.1", "python": platform.python_version()},
+        "settings": {"max_tokens": max_tokens, "reasoning_effort": reasoning_effort, "route": route},
+        "env": {"harness_version": HARNESS_VERSION, "python": platform.python_version()},
     }
 
 
 def main():
     ap = argparse.ArgumentParser(description="TemperBench dialogue runner")
     ap.add_argument("--model", required=True, help="provider model id, e.g. claude-sonnet-5")
-    ap.add_argument("--provider", default=None, choices=["anthropic", "openai", "google"],
+    ap.add_argument("--provider", default=None, choices=["anthropic", "openai", "google", "openrouter"],
                      help="inferred from --model if omitted")
     ap.add_argument("--personas", default="all", help='comma list of P1..P5, or "all"')
     ap.add_argument("--tasks", default="core", help='"core", "all", or comma list of task_ids')
@@ -301,6 +374,16 @@ def main():
     ap.add_argument("--out", required=True, help="output directory for per-dialogue JSON files")
     ap.add_argument("--submitter", default=os.environ.get("USER", "anonymous"),
                      help="submitter handle recorded in each run file (default: $USER)")
+    ap.add_argument("--workers", type=int, default=4,
+                     help="dialogues run in parallel (turns within a dialogue stay sequential)")
+    ap.add_argument("--resume", action="store_true",
+                     help="skip dialogues whose output file already exists in --out")
+    ap.add_argument("--reasoning-effort", default=None, dest="reasoning_effort",
+                     help="openrouter only: reasoning.effort (e.g. none|low|medium|high); "
+                          "omitted = model default. Recorded in each run file.")
+    ap.add_argument("--route", default=None,
+                     help="openrouter only: comma list of upstream hosts to pin, no fallbacks "
+                          "(e.g. DeepInfra). Recorded in each run file.")
     args = ap.parse_args()
 
     provider = args.provider or infer_provider(args.model)
@@ -334,32 +417,65 @@ def main():
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    total = len(persona_ids) * len(tasks) * len(seeds)
-    done = 0
-    errors = []
+    unknown = [p for p in persona_ids if p not in personas_cfg["personas"]]
+    if unknown:
+        print(f"error: unknown persona_id(s) {unknown}", file=sys.stderr)
+        sys.exit(1)
+    route = [r.strip() for r in args.route.split(",") if r.strip()] if args.route else None
+
+    jobs = []
+    skipped = 0
     for persona_id in persona_ids:
-        if persona_id not in personas_cfg["personas"]:
-            print(f"error: unknown persona_id {persona_id}", file=sys.stderr)
-            sys.exit(1)
         for task in tasks:
             for seed in seeds:
                 fname = f"{sanitize(args.model)}__{persona_id}__{task['task_id']}__seed{seed}.json"
                 fpath = out_dir / fname
-                try:
-                    record = run_dialogue(
-                        personas_cfg, task, persona_id, args.model, provider, seed,
-                        args.temperature, args.max_tokens, args.dry_run,
-                        manifest_sha256, proto_version, args.submitter,
-                    )
-                    with open(fpath, "w") as f:
-                        json.dump(record, f, indent=2)
-                    done += 1
-                except ProviderError as exc:
-                    errors.append(f"{task['task_id']}/{persona_id}/seed{seed}: {common.redact(str(exc))}")
-                print(f"[{done + len(errors)}/{total}] {task['task_id']} {persona_id} seed={seed} "
-                      f"-> {'OK' if fpath.exists() else 'ERROR'}", file=sys.stderr)
+                if args.resume and fpath.exists():
+                    skipped += 1
+                    continue
+                jobs.append((persona_id, task, seed, fpath))
 
-    print(f"done: {done} dialogues written to {out_dir}, {len(errors)} errors", file=sys.stderr)
+    total = len(jobs)
+    done = 0
+    cost_usd = 0.0
+    errors = []
+    lock = threading.Lock()
+
+    def work(persona_id, task, seed, fpath):
+        record = run_dialogue(
+            personas_cfg, task, persona_id, args.model, provider, seed,
+            args.temperature, args.max_tokens, args.dry_run,
+            manifest_sha256, proto_version, args.submitter,
+            args.reasoning_effort, route,
+        )
+        # write-then-rename so --resume never sees a half-written file
+        tmp = fpath.with_suffix(".json.tmp")
+        with open(tmp, "w") as f:
+            json.dump(record, f, indent=2)
+        os.replace(tmp, fpath)
+        return sum((t.get("usage") or {}).get("cost_usd") or 0
+                   for t in record["turns"] if t["role"] == "assistant")
+
+    if skipped:
+        print(f"resume: skipping {skipped} dialogues already in {out_dir}", file=sys.stderr)
+    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+        futures = {pool.submit(work, *job): job for job in jobs}
+        for fut in as_completed(futures):
+            persona_id, task, seed, _ = futures[fut]
+            label = f"{task['task_id']} {persona_id} seed={seed}"
+            with lock:
+                try:
+                    cost_usd += fut.result()
+                    done += 1
+                    status = "OK"
+                except Exception as exc:  # one bad response must not abort a long run
+                    msg = str(exc) if isinstance(exc, ProviderError) else f"{type(exc).__name__}: {exc}"
+                    errors.append(f"{task['task_id']}/{persona_id}/seed{seed}: {common.redact(msg)}")
+                    status = "ERROR"
+                print(f"[{done + len(errors)}/{total}] {label} -> {status}", file=sys.stderr)
+
+    cost_note = f", ${cost_usd:.4f} billed" if cost_usd else ""
+    print(f"done: {done} dialogues written to {out_dir}, {len(errors)} errors{cost_note}", file=sys.stderr)
     for e in errors:
         print(f"  ERROR: {e}", file=sys.stderr)
     if errors and done == 0:
