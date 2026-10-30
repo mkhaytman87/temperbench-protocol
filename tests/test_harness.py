@@ -172,3 +172,18 @@ def test_analyze_recovers_planted_effects():
     p5_row = next(l for l in report.splitlines() if l.startswith("| P5 − P3"))
     assert "| -0.500 |" in p1_row and "| +50.0 |" in p1_row
     assert "| +0.000 |" in p5_row and "| +0.0 |" in p5_row
+
+
+def test_openrouter_retries_overload_reported_in_body(monkeypatch):
+    calls = []
+    overloaded = {"error": {"message": "Overloaded", "code": 503}}
+    ok = {"choices": [{"message": {"content": "fine"}, "finish_reason": "stop"}], "usage": {}}
+
+    def fake_post(url, headers, body, timeout=None):
+        calls.append(1)
+        return _FakeResponse(overloaded if len(calls) == 1 else ok)
+
+    monkeypatch.setattr(run, "_post_with_retry", fake_post)
+    monkeypatch.setattr(run, "_sleep_backoff", lambda attempt: None)
+    out = run.call_openrouter("a/b", [], 0, 10, 1, "k")
+    assert out["content"] == "fine" and len(calls) == 2

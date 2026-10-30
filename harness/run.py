@@ -219,11 +219,18 @@ def call_openrouter(model: str, messages: list, temperature: float, max_tokens: 
         # across persona arms.
         body["provider"] = {"order": route, "allow_fallbacks": False}
     t0 = time.monotonic()
-    resp = _post_with_retry(OPENROUTER_URL, headers, body)
+    for attempt in range(MAX_ATTEMPTS):
+        resp = _post_with_retry(OPENROUTER_URL, headers, body)
+        if resp.status_code >= 400:
+            raise ProviderError(f"openrouter API error {resp.status_code}: {common.redact(resp.text[:500])}")
+        data = resp.json()
+        # upstream overloads can arrive as HTTP 200 with the status code in the body
+        err_code = (data.get("error") or {}).get("code")
+        if err_code in RETRYABLE_STATUS and attempt < MAX_ATTEMPTS - 1:
+            _sleep_backoff(attempt)
+            continue
+        break
     latency_ms = int((time.monotonic() - t0) * 1000)
-    if resp.status_code >= 400:
-        raise ProviderError(f"openrouter API error {resp.status_code}: {common.redact(resp.text[:500])}")
-    data = resp.json()
     if data.get("error") or not data.get("choices"):
         raise ProviderError(f"openrouter returned no choices: {common.redact(json.dumps(data)[:500])}")
     choice = data["choices"][0]
