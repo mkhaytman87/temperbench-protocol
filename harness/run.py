@@ -43,12 +43,12 @@ OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 GEMINI_URL_TMPL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-HARNESS_VERSION = "0.2"
+HARNESS_VERSION = "0.3"
 REQUEST_TIMEOUT_S = 180  # reasoning models can think for well over a minute per turn
 MAX_ATTEMPTS = 3
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
-ALL_PERSONAS = ["P1", "P2", "P3", "P4", "P5"]
+ALL_PERSONAS = ["P1", "P1T", "P2", "P3", "P4", "P5"]
 
 
 class ProviderError(RuntimeError):
@@ -261,7 +261,7 @@ def call_dry_run(domain: str, entry_point: str | None) -> dict:
             f"    raise NotImplementedError('dry-run stub')\n```"
         )
     elif domain == "math":
-        content = "Working through it step by step... The answer is 42."
+        content = "Working through it step by step... The answer is 42.\n\nFINAL ANSWER: 42"
     else:
         content = 'Here is the extracted JSON:\n\n```json\n{"placeholder": true}\n```'
     approx_tokens = max(1, len(content) // 4)
@@ -372,7 +372,7 @@ def main():
     ap.add_argument("--model", required=True, help="provider model id, e.g. claude-sonnet-5")
     ap.add_argument("--provider", default=None, choices=["anthropic", "openai", "google", "openrouter"],
                      help="inferred from --model if omitted")
-    ap.add_argument("--personas", default="all", help='comma list of P1..P5, or "all"')
+    ap.add_argument("--personas", default="all", help='comma list of persona ids (P1,P1T,P2..P5), or "all"')
     ap.add_argument("--tasks", default="core", help='"core", "all", or comma list of task_ids')
     ap.add_argument("--seeds", default="1", help="comma list of int seeds, e.g. 1,2,3")
     ap.add_argument("--temperature", type=float, default=0, help="sampling temperature (default 0)")

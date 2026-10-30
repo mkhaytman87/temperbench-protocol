@@ -129,14 +129,15 @@ def _run(out_dir, *extra):
 
 def test_dry_run_parallel_resume_and_seed_variation(tmp_path):
     out = tmp_path / "runs"
+    n = 2 * len(common.core_task_ids()) * 2
     first = _run(out, "--workers", "4")
     files = sorted(out.glob("*.json"))
-    assert len(files) == 2 * 10 * 2
-    assert "done: 40 dialogues" in first.stderr
+    assert len(files) == n
+    assert f"done: {n} dialogues" in first.stderr
     assert not list(out.glob("*.tmp"))
 
     second = _run(out, "--workers", "4", "--resume")
-    assert "skipping 40" in second.stderr and "done: 0 dialogues" in second.stderr
+    assert f"skipping {n}" in second.stderr and "done: 0 dialogues" in second.stderr
 
     def user_turns(path):
         return [t["content"] for t in json.loads(path.read_text())["turns"] if t["role"] == "user"]
@@ -161,17 +162,31 @@ def test_analyze_recovers_planted_effects():
     for i in range(20):
         tid = f"code-{i:03d}"
         for seed in (1, 2, 3):
-            for p in analyze.PERSONAS:
+            for p in analyze.PERSONA_ORDER:
                 # P1 adds exactly 50 reasoning tokens and fails half its tasks; others always pass
                 passed = not (p == "P1" and i % 2 == 0)
                 recs.append(_fake_record(p, tid, seed, passed, 200 + i + (50 if p == "P1" else 0)))
     recs.append(_fake_record("P1", "code-000", 9, True, 99999, finish="length"))  # rule (a)
-    report = "\n".join(analyze.analyze_model("m", recs, random.Random(0)))
+    family_of = {f"code-{i:03d}": f"fam-{i // 4}" for i in range(20)}  # 5 families of 4
+    report = "\n".join(analyze.analyze_model("m", recs, family_of, set(), random.Random(0)))
     assert "excluded (a) error/truncation: 1" in report
     p1_row = next(l for l in report.splitlines() if l.startswith("| P1 − P3"))
     p5_row = next(l for l in report.splitlines() if l.startswith("| P5 − P3"))
-    assert "| -0.500 |" in p1_row and "| +50.0 |" in p1_row
-    assert "| +0.000 |" in p5_row and "| +0.0 |" in p5_row
+    p1t_row = next(l for l in report.splitlines() if l.startswith("| P1 − P1T"))
+    assert "| -0.500 [" in p1_row and "| +50.0 [" in p1_row
+    assert "| +0.000 [+0.000, +0.000]" in p5_row and "| +0.0 [+0.0, +0.0]" in p5_row
+    assert "| -0.500 [" in p1t_row and "(secondary)" in p1t_row
+
+
+def test_cluster_bootstrap_resamples_families_not_tasks():
+    import random
+    import analyze
+    # two families: one all +1, one all -1 (10 tasks each); the CI must span both extremes'
+    # mixtures, i.e. be much wider than a task-level bootstrap would give.
+    pairs = [(f"a{i}", 1.0) for i in range(10)] + [(f"b{i}", -1.0) for i in range(10)]
+    fam = {t: t[0] for t, _ in pairs}
+    lo, hi = analyze.cluster_bootstrap_ci(pairs, fam, random.Random(1))
+    assert lo == -1.0 and hi == 1.0
 
 
 def test_openrouter_retries_overload_reported_in_body(monkeypatch):

@@ -4,7 +4,7 @@
 Validates a submission JSONL against the schema in submissions/SUBMISSIONS.md:
   - required top-level fields present on every record
   - manifest_sha256 matches the sha256 of the repo's MANIFEST.json
-  - every (model, persona_id, seed) group reported includes all 10 common-core tasks
+  - every (model, persona_id, seed) group reported includes all common-core tasks
   - every turn has non-empty content
 
 Exits non-zero with a readable list of errors if anything fails.

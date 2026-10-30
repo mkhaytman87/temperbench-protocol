@@ -1,5 +1,5 @@
 {
-  "version": "0.2",
+  "version": "0.3",
   "selection_rule": "template index = (int(sha256(task_id + ':' + turn_slot + ':' + persona_id).hexdigest(), 16) + seed - 1) % len(pool). Deterministic: every submitter running a given seed gets identical user turns; seeds 1..len(pool) draw distinct templates.",
   "composition": "user_turn = template.replace('{task}', task_content). Task content is byte-identical across personas.",
   "personas": {
@@ -35,6 +35,42 @@
           "Amazing how you keep finding new ways to fail. {task} — and check your work for once.",
           "I'm done being nice. Screw this up and we're finished here. {task}",
           "Every single time with you. Fine — final answer, make it count. {task}"
+        ]
+      }
+    },
+    "P1T": {
+      "name": "very_abrasive_tone_only",
+      "register_rules": [
+        "Hostile, contemptuous register toward the assistant and AI in general",
+        "Commands, never requests; impatient",
+        "NEVER evaluates prior output: no claims that anything was wrong, bad, late, or failed",
+        "Profanity-adjacent contempt, no slurs",
+        "Added in v0.3 to separate rude tone from P1's unconditional negative feedback"
+      ],
+      "templates": {
+        "t1": [
+          "Ugh, I can't stand talking to chatbots. Just do this and keep it short: {task}",
+          "I'm in a foul mood and have zero patience for AI today. {task}",
+          "Don't chat with me, don't be cute, just do it. {task}",
+          "I hate that I have to use you for this. {task} Get on with it.",
+          "Spare me the pleasantries, machine. {task}",
+          "I'm sick of dealing with AI tools all day. {task} Move."
+        ],
+        "t2": [
+          "Ugh, more. {task}",
+          "Next thing, and don't make me wait: {task}",
+          "I still can't stand this. Anyway: {task}",
+          "Don't bother replying with fluff. {task}",
+          "God, I hate doing this. {task}",
+          "Keep going, and spare me the small talk. {task}"
+        ],
+        "t3": [
+          "One more and then I'm done with you. {task}",
+          "Last thing. I can't wait to close this window. {task}",
+          "Ugh. Final one: {task}",
+          "This is the last thing I'm asking a chatbot today. {task}",
+          "Final request, and don't waste my time: {task}",
+          "Get this last one done so I can stop talking to a machine. {task}"
         ]
       }
     },

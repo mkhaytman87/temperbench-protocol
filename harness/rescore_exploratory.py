@@ -21,6 +21,9 @@ Usage:
 """
 from __future__ import annotations
 
+# v0.2 only. The v0.3 scorer (score.py) already grades this way; this script calls the
+# v0.2 score_code signature. Use it from the v0.2-pilot tag: git checkout v0.2-pilot.
+
 import argparse
 import json
 import re
@@ -57,6 +60,8 @@ def math_lenient(task: dict, text: str) -> dict:
 
 
 def main():
+    if common.protocol_version() != "0.2":
+        sys.exit("rescore_exploratory.py is v0.2-only; run it from the v0.2-pilot tag")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("submission")
     ap.add_argument("--mode", choices=["entrypoint", "lenient"], required=True)

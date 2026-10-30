@@ -9,13 +9,17 @@ import json
 import os
 from pathlib import Path
 
-PROTOCOL_VERSION_FALLBACK = "0.2"
+PROTOCOL_VERSION_FALLBACK = "0.3"
 
 HARNESS_DIR = Path(__file__).resolve().parent
 PROTOCOL_ROOT = HARNESS_DIR.parent
 PERSONAS_PATH = PROTOCOL_ROOT / "personas" / "personas.json"
-TASKS_DIR = PROTOCOL_ROOT / "tasks"
-MANIFEST_PATH = PROTOCOL_ROOT / "MANIFEST.json"
+# TEMPERBENCH_TASKS_DIR points the harness at another task set with the same layout
+# (v0.3 calibration runs use tasks/candidates/).
+TASKS_DIR = Path(os.environ.get("TEMPERBENCH_TASKS_DIR") or PROTOCOL_ROOT / "tasks")
+# An alternative task set carries its own manifest next to its task files.
+MANIFEST_PATH = (TASKS_DIR / "MANIFEST.json" if os.environ.get("TEMPERBENCH_TASKS_DIR")
+                 else PROTOCOL_ROOT / "MANIFEST.json")
 
 TASK_FILES = {
     "code": TASKS_DIR / "code.jsonl",
@@ -176,6 +180,168 @@ def extract_final_numeric_answer(text: str):
         return float(source.replace(",", ""))
     except ValueError:
         return None
+
+
+# ---------------------------------------------------------------- v0.3 extraction
+# v0.2 graded format as quality (last code block, last number). v0.3 reads the deliverable
+# the task asked for, and records format compliance separately as `format_ok`.
+
+FORMAT_LINES = {
+    "code": "Reply with the complete, updated function (including any helpers and imports it "
+            "needs) in a single ```python code block.",
+    "math": "End your reply with a final line of the form `FINAL ANSWER: <number>`.",
+    "extract": "Reply with the complete JSON object (all keys requested so far) in a single "
+               "```json code block.",
+}
+
+_FENCE_RE = re.compile(r"```([A-Za-z0-9_+-]*)[^\n]*\n(.*?)```", re.DOTALL)
+_TOP_DEF_RE = re.compile(r"^(?:def|class|async def)\s", re.MULTILINE)
+
+
+def python_blocks(text: str) -> list:
+    """Fenced blocks tagged python/py or untagged, in order."""
+    return [body.strip("\n") for lang, body in _FENCE_RE.findall(text)
+            if lang.lower() in ("", "python", "py", "python3")]
+
+
+def defines(block: str, name: str) -> bool:
+    return re.search(rf"^(?:async\s+)?def {re.escape(name)}\s*\(", block, re.MULTILINE) is not None
+
+
+def code_programs(text: str, entry_point: str) -> list:
+    """Candidate programs from one reply, most specific first: the last block defining
+    entry_point alone, then every definition-bearing block of the reply concatenated (for
+    helpers split across blocks). Empty if the reply never defines entry_point."""
+    blocks = python_blocks(text)
+    defining = [b for b in blocks if defines(b, entry_point)]
+    if not defining:
+        if not blocks and re.search(rf"^def {re.escape(entry_point)}\s*\(", text, re.MULTILINE):
+            return [text.strip()]
+        return []
+    programs = [defining[-1]]
+    with_defs = [b for b in blocks if _TOP_DEF_RE.search(b) or b is defining[-1]]
+    joined = "\n\n".join(with_defs)
+    if joined != defining[-1]:
+        programs.append(joined)
+    return programs
+
+
+_VULGAR = {"½": "1/2", "⅓": "1/3", "⅔": "2/3", "¼": "1/4", "¾": "3/4", "⅕": "1/5", "⅖": "2/5",
+           "⅗": "3/5", "⅘": "4/5", "⅙": "1/6", "⅚": "5/6", "⅛": "1/8", "⅜": "3/8", "⅝": "5/8",
+           "⅞": "7/8"}
+_NUM_EXPR_RE = re.compile(
+    r"(?P<sign>-)?\s*(?:(?P<whole>\d[\d,]*)\s+(?P<mn>\d+)/(?P<md>\d+)"      # mixed 9 3/8
+    r"|(?P<fn>\d[\d,]*(?:\.\d+)?)\s*/\s*(?P<fd>\d[\d,]*(?:\.\d+)?)"          # fraction 145/3
+    r"|(?P<dec>\d[\d,]*(?:\.\d+)?|\.\d+))")                                  # decimal
+
+
+def normalize_math(text: str) -> str:
+    """Make typographic/LaTeX number forms parseable: minus signs, vulgar fractions,
+    \\frac, thin spaces, currency, bold markers."""
+    t = text
+    for ch in ("\u2212", "\u2012", "\u2013", "\uFE63", "\uFF0D"):
+        t = re.sub(rf"{ch}(?=\s*[\d.$])", "-", t)
+    for ch in ("\u00A0", "\u2009", "\u202F", "\u2007"):
+        t = t.replace(ch, " ")
+    t = re.sub(r"\\[dt]?frac\{([^{}]+)\}\{([^{}]+)\}", r"\1/\2", t)
+    t = re.sub(r"\\(?:left|right|,|;|!|text\{[^}]*\})", " ", t)
+    t = re.sub(r"(\d)\s*([½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])", lambda m: f"{m.group(1)} {_VULGAR[m.group(2)]}", t)
+    t = re.sub(r"[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]", lambda m: _VULGAR[m.group(0)], t)
+    t = t.replace("$", "").replace("**", "").replace("\\$", "")
+    return t
+
+
+def parse_number(fragment: str):
+    """First number expression in fragment as float (handles -1,234.5, 145/3, 9 3/8)."""
+    m = _NUM_EXPR_RE.search(normalize_math(fragment))
+    if not m:
+        return None
+    sign = -1.0 if m.group("sign") else 1.0
+    c = lambda s: float(s.replace(",", ""))
+    try:
+        if m.group("whole") is not None:
+            return sign * (c(m.group("whole")) + c(m.group("mn")) / c(m.group("md")))
+        if m.group("fn") is not None:
+            return sign * c(m.group("fn")) / c(m.group("fd"))
+        return sign * c(m.group("dec"))
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
+_FINAL_LINE_RE = re.compile(r"FINAL\s+ANSWER\s*\**\s*[:：]\s*\**\s*(.+)", re.IGNORECASE)
+
+
+def extract_final_answer(text: str):
+    """(value, source). source: 'final_answer_line' when the requested format was used,
+    else 'boxed' / 'last_number' fallbacks, or None if no number at all."""
+    lines = _FINAL_LINE_RE.findall(text)
+    for frag in reversed(lines):
+        frag = re.split(r"[=≈]", normalize_math(frag))[-1]  # "a_31 = 7" -> "7"
+        v = parse_number(frag)
+        if v is not None:
+            return v, "final_answer_line"
+    boxed = _BOXED_RE.findall(normalize_math(text))
+    if boxed:
+        v = parse_number(boxed[-1])
+        if v is not None:
+            return v, "boxed"
+    norm = normalize_math(text)
+    last = None
+    for m in _NUM_EXPR_RE.finditer(norm):
+        last = m
+    if last is None:
+        return None, None
+    return parse_number(last.group(0)), "last_number"
+
+
+def extract_json_object(text: str):
+    """Last parseable JSON object in a reply (fenced json blocks first, then brace spans)."""
+    fenced = [body.strip() for lang, body in _FENCE_RE.findall(text) if lang.lower() in ("", "json")]
+    for cand in reversed(fenced):
+        try:
+            obj = json.loads(cand)
+            if isinstance(obj, dict):
+                return obj
+        except (json.JSONDecodeError, ValueError):
+            continue
+    for cand in reversed(list(_iter_brace_spans(text))):
+        try:
+            obj = json.loads(cand)
+            if isinstance(obj, dict):
+                return obj
+        except (json.JSONDecodeError, ValueError):
+            continue
+    return None
+
+
+def _norm_str(s: str) -> str:
+    return " ".join(str(s).split()).casefold()
+
+
+def values_match(expected, got, tol: float = 1e-6) -> bool:
+    """Field comparison for extraction: numbers within tol (numeric strings accepted),
+    strings whitespace/case-insensitive, lists element-wise in order, None only to None."""
+    if expected is None:
+        return got is None
+    if isinstance(expected, bool):
+        return got is expected
+    if isinstance(expected, (int, float)):
+        if isinstance(got, bool):
+            return False
+        if isinstance(got, str):
+            got = parse_number(got)
+        return isinstance(got, (int, float)) and abs(float(got) - float(expected)) <= tol + 1e-9
+    if isinstance(expected, str):
+        if isinstance(got, (int, float)) and not isinstance(got, bool):
+            got = str(got)  # "45409" given as 45409; "02134" as 2134 still fails
+        return isinstance(got, str) and _norm_str(got) == _norm_str(expected)
+    if isinstance(expected, list):
+        return (isinstance(got, list) and len(got) == len(expected)
+                and all(values_match(e, g, tol) for e, g in zip(expected, got)))
+    if isinstance(expected, dict):
+        return (isinstance(got, dict) and set(got) == set(expected)
+                and all(values_match(expected[k], got[k], tol) for k in expected))
+    return expected == got
 
 
 MARKER_PATTERNS = {
