@@ -18,6 +18,8 @@ python harness/run.py --model claude-sonnet-5 --personas P1,P3,P5 --tasks core -
 # --resume finishes a partial run without re-paying for completed dialogues
 python harness/run.py --model anthropic/claude-haiku-5.5 --personas all --tasks all --seeds 1,2,3 --workers 8 --resume --out runs/
 python harness/score.py runs/ --out my_submission.jsonl
+# score.py executes model-written code; on macOS, sandbox it (no network, temp-only writes):
+#   sandbox-exec -f harness/score-sandbox.sb -D HOME="$HOME" python -B harness/score.py runs/ --out /tmp/my_submission.jsonl
 python harness/validate.py my_submission.jsonl
 ```
 

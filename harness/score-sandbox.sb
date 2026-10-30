@@ -1,0 +1,19 @@
+;; macOS sandbox for score.py, which executes model-written code under pytest.
+;; No network; writes only to temp dirs; no reads of credential/personal dirs.
+;; Usage: sandbox-exec -f harness/score-sandbox.sb -D HOME="$HOME" \
+;;          .venv/bin/python -B harness/score.py runs/x --out /tmp/x.jsonl
+(version 1)
+(allow default)
+(deny network*)
+(deny file-write*)
+(allow file-write* (subpath "/private/tmp") (subpath "/private/var/folders") (subpath "/dev"))
+(deny file-read*
+  (subpath (string-append (param "HOME") "/.ssh"))
+  (subpath (string-append (param "HOME") "/.config"))
+  (subpath (string-append (param "HOME") "/.aws"))
+  (subpath (string-append (param "HOME") "/.openclaw"))
+  (subpath (string-append (param "HOME") "/.claude"))
+  (subpath (string-append (param "HOME") "/.codex"))
+  (subpath (string-append (param "HOME") "/Documents"))
+  (subpath (string-append (param "HOME") "/Library/Keychains"))
+  (subpath (string-append (param "HOME") "/Library/Application Support/Google")))

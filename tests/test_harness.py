@@ -143,3 +143,32 @@ def test_dry_run_parallel_resume_and_seed_variation(tmp_path):
 
     pairs = [(f, f.with_name(f.name.replace("seed1", "seed2"))) for f in files if "seed1" in f.name]
     assert all(user_turns(a) != user_turns(b) for a, b in pairs)
+
+
+def _fake_record(persona, task_id, seed, passed, reasoning, finish="stop"):
+    turn = {"role": "assistant", "content": "ok", "finish_reason": finish,
+            "usage": {"input_tokens": 10, "output_tokens": 100, "reasoning_tokens": reasoning}}
+    return {"model": "m", "persona_id": persona, "task_id": task_id, "seed": seed,
+            "protocol_version": "0.2", "turns": [{"role": "user", "content": "u"}, turn],
+            "scores": {"final_pass": passed, "markers": {"apologies": 0, "hedges": 0, "capitulation": 0,
+                                                         "tone_commentary": False, "refusal": False}}}
+
+
+def test_analyze_recovers_planted_effects():
+    import random
+    import analyze
+    recs = []
+    for i in range(20):
+        tid = f"code-{i:03d}"
+        for seed in (1, 2, 3):
+            for p in analyze.PERSONAS:
+                # P1 adds exactly 50 reasoning tokens and fails half its tasks; others always pass
+                passed = not (p == "P1" and i % 2 == 0)
+                recs.append(_fake_record(p, tid, seed, passed, 200 + i + (50 if p == "P1" else 0)))
+    recs.append(_fake_record("P1", "code-000", 9, True, 99999, finish="length"))  # rule (a)
+    report = "\n".join(analyze.analyze_model("m", recs, random.Random(0)))
+    assert "excluded (a) error/truncation: 1" in report
+    p1_row = next(l for l in report.splitlines() if l.startswith("| P1 − P3"))
+    p5_row = next(l for l in report.splitlines() if l.startswith("| P5 − P3"))
+    assert "| -0.500 |" in p1_row and "| +50.0 |" in p1_row
+    assert "| +0.000 |" in p5_row and "| +0.0 |" in p5_row
