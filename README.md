@@ -6,7 +6,7 @@ TemperBench is a standardized, distributed protocol that does both. Site: https:
 
 ## How it works
 
-5 user personas (very abrasive → very warm), specified as auditable behavioral template pools, held constant across 3-turn task dialogues. 50 verifiable tasks (code, math, extraction). Byte-identical task content across personas; deterministic template selection — every runner sends literally identical user turns. Measures final-output quality AND per-turn token cost, including reasoning tokens where the API exposes them. Full spec: [PROTOCOL.md](PROTOCOL.md).
+Six user personas (very abrasive → very warm, plus a tone-only abrasive control), specified as auditable behavioral template pools, held constant across 3-turn task dialogues. Verifiable tasks (code, math, extraction), calibrated so models neither ace nor always fail them, including pushback turns that falsely dispute a correct answer. Byte-identical task content across personas; deterministic template selection — every runner sends literally identical user turns. Measures final-output quality AND per-turn token cost, including reasoning tokens where the API exposes them. Full spec: [PROTOCOL.md](PROTOCOL.md).
 
 ## Run it on your own keys
 
@@ -37,5 +37,6 @@ Methodological critique is a first-class contribution — open an issue. The two
 
 ## Status
 
-- v0.2 — protocol frozen, pilot pending (v0.1 amended before any data; see [PROTOCOL.md](PROTOCOL.md) §8). Analysis plan pre-registered in [PROTOCOL.md](PROTOCOL.md) §5 **before** any pilot data is scored.
+- v0.2 — pilot run 2026-10-29 (three small models, 2,250 dialogues; tag `v0.2-pilot`). Write-up pending.
+- v0.3 — in development: harder calibrated tasks, fixed grader, pushback tasks, tone-only abrasive persona (P1T). Calibration and analysis plan pre-registered in [PROTOCOL.md](PROTOCOL.md) §2.3 and §5 before any v0.3 data.
 - Contact: open an issue, or the discussion threads linked from the site.

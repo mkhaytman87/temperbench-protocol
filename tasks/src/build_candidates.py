@@ -30,6 +30,13 @@ KEEP = {
     "extract": ["task_id", "domain", "family", "pushback", "t1", "t2", "t3", "expected",
                 "numeric_tolerance"],
 }
+# Near-duplicate code tasks written independently by different authoring batches share a
+# family, so the cluster bootstrap (PROTOCOL.md §5) doesn't treat them as independent.
+FAMILY_OVERRIDES = {
+    "code-B09": "code-roundrobin", "code-D11": "code-roundrobin",
+    "code-B13": "code-sessionize", "code-D03": "code-sessionize",
+    "code-A10": "code-duration", "code-C04": "code-duration",
+}
 SOURCES = {
     "code": sorted(SRC.glob("code_batch_*.jsonl")),
     "math": [SRC / "math_candidates.jsonl"],
@@ -55,6 +62,7 @@ def main():
                 seen.add(t["task_id"])
                 row = {k: t[k] for k in KEEP[domain] if k in t}
                 row.setdefault("pushback", False)
+                row["family"] = FAMILY_OVERRIDES.get(row["task_id"], row.get("family", row["task_id"]))
                 for slot in ("t1", "t2", "t3"):
                     row[slot] = f"{t[slot].rstrip()}\n\n{common.FORMAT_LINES[domain]}"
                 rows.append(row)

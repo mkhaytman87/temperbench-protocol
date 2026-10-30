@@ -121,7 +121,7 @@ Any change to personas, tasks, or scoring bumps the protocol version. Results ar
 **2026-10-30, v0.2 → v0.3** (after the v0.2 pilot; before any v0.3 data). Pilot results: `runs/pilot/SUMMARY.md` (not yet published).
 1. *Why:* the v0.2 pilot's pre-registered token result held (P1 raised reasoning tokens in 3/3 models), but quality was unmeasurable. The v0.2 grader took the last code block and the last number, so persona-driven format changes (trailing usage examples, restated earlier answers) read as quality changes; after an exploratory re-grade every model scored ~97–100% and the remaining failures were grader or answer-key artifacts.
 2. *Grader:* `harness/score.py` v0.3 (§2.1, §3). Unit tests cover each misgrade seen in the pilot (`tests/test_scoring_v03.py`).
-3. *Tasks:* new calibrated battery (§2), pushback tasks (§2.2).
+3. *Tasks:* new calibrated battery (§2), pushback tasks (§2.2). Candidate pool (committed before calibration): 187 tasks — 64 code (4 authoring batches of 16, each checked by reference + mutants), 75 math (15 families × 5), 48 extract (6 families × 8); 50 pushback; 82 families. Three pairs of code tasks written independently on the same base problem share a family (`FAMILY_OVERRIDES` in `tasks/src/build_candidates.py`).
 4. *Personas:* P1T added (§1); P1–P5 unchanged.
 5. *Analysis:* family-cluster bootstrap, output tokens as a primary measure, P1T contrasts, capitulation and format compliance (§5).
 6. *Calibration configuration:* the three pilot models on the pilot hosts and reasoning-effort settings (§8, 2026-10-29 table), `max_tokens` 16384 (raised from 8192: harder tasks need more reasoning room, and truncation is an exclusion), temperature 0 sent, persona P3, seeds 4–5, all candidates.
