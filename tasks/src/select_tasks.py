@@ -18,8 +18,14 @@ Rule, per candidate task, over its n calibration dialogues (n = 3 per seed with 
      (ties broken by sha256 of task_id);
   5. core = the CORE_PER_DOMAIN kept tasks per domain closest to 0.5 (same tie-break).
 
+Amended rule (PROTOCOL.md §8, 2026-10-30 checkpoint 2; `--rule ceiling`): calibration showed
+neutral-persona pass rates of 86-98%, so the pass/fail band would discard most tasks. Under
+the amended rule every candidate is kept except listed defects and truncation-prone tasks
+(steps 1-2 above); steps 3-4 are skipped; core = the CORE_PER_DOMAIN tasks per domain with
+the smallest sha256(task_id).
+
 Usage:
-    TEMPERBENCH_TASKS_DIR=tasks/candidates python3 tasks/src/select_tasks.py calib_*.jsonl
+    TEMPERBENCH_TASKS_DIR=tasks/candidates python3 tasks/src/select_tasks.py [--rule band|ceiling] calib_*.jsonl
 """
 from __future__ import annotations
 
@@ -43,7 +49,12 @@ def h(task_id: str) -> str:
 
 
 def main():
-    files = sys.argv[1:]
+    args = sys.argv[1:]
+    rule = "band"
+    if args[:1] == ["--rule"]:
+        rule, args = args[1], args[2:]
+    assert rule in ("band", "ceiling"), rule
+    files = args
     if not files:
         print(__doc__)
         sys.exit(2)
@@ -75,10 +86,15 @@ def main():
         rate = s["pass"] / s["n"] if s["n"] else None
         if tid in excluded:
             verdict = f"drop: defect ({excluded[tid]})"
-        elif s["n"] == 0:
+        elif s["n"] == 0 and rule == "band":
             verdict = "drop: no calibration data"
         elif s["trunc"] >= max(1, math.ceil(s["n"] / 3)):
             verdict = "drop: truncation-prone"
+        elif rule == "ceiling":
+            verdict = "in band"
+            kept.append(tid)
+            rows.append((tid, s, rate, verdict))
+            continue
         elif s["pass"] == 0:
             verdict = "drop: never passed"
         elif s["pass"] == s["n"]:
@@ -88,9 +104,13 @@ def main():
             kept.append(tid)
         rows.append((tid, s, rate, verdict))
 
-    closeness = lambda tid: (abs(stats[tid]["pass"] / stats[tid]["n"] - 0.5), h(tid))
-    kept.sort(key=closeness)
-    selected = set(kept[:MAX_TASKS])
+    if rule == "ceiling":
+        kept.sort(key=h)
+        selected = set(kept)
+    else:
+        closeness = lambda tid: (abs(stats[tid]["pass"] / stats[tid]["n"] - 0.5), h(tid))
+        kept.sort(key=closeness)
+        selected = set(kept[:MAX_TASKS])
     core = set()
     for domain in ("code", "math", "extract"):
         core |= set([t for t in kept if t in selected and cand[t]["domain"] == domain][:CORE_PER_DOMAIN])
@@ -99,7 +119,7 @@ def main():
         out = [dict(cand[t], core=t in core) for t in sorted(selected) if cand[t]["domain"] == domain]
         (OUT / f"{domain}.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in out))
 
-    report = ["# v0.3 task selection report", "",
+    report = ["# v0.3 task selection report", "", f"Rule: {rule}",
               f"Calibration files: {', '.join(Path(f).name for f in files)}",
               f"Candidates: {len(cand)} · in band: {len(kept)} · selected: {len(selected)} · core: {len(core)}", "",
               "| task | domain | pushback | calib pass | truncated | verdict |", "|---|---|---|---|---|---|"]

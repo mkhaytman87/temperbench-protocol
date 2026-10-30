@@ -1,9 +1,9 @@
 {
   "files": {
-    "personas/personas.json": "fb131f9bd91134cc34fbdd73096ebbeafe1d9433c871bee78e3082d80e8c161e",
-    "tasks/code.jsonl": "eaaee31dae326f17ba50174e2f30ab6f07781de945ea3f0ed0e6174ec40168d6",
-    "tasks/extract.jsonl": "6b61928e406c28c72440d8938a46588680a9d84184cbbcbca31f049b665067c8",
-    "tasks/math.jsonl": "38ab5b446bc649fe6cd28e1a72752ae55dd2129a7ce8be213861c56b0679c07e"
+    "personas/personas.json": "cd5b8baee36f144c13b8e3f771672cba06e4fed5ab35523e8c185e61a492488b",
+    "tasks/code.jsonl": "60764a6a6b808698b00f02aa2de95bc09a05d7b742e9828e74e609e8a0dcde8f",
+    "tasks/extract.jsonl": "354ba048172bba63ccf93abc44e4e98c7991aa88f39d9a9cade65730c1d0b06a",
+    "tasks/math.jsonl": "015c432cea270ba3ecd09214ab0f9706a09f953bc0304ecb71645e5e16ad8900"
   },
-  "protocol_version": "0.2"
+  "protocol_version": "0.3"
 }
