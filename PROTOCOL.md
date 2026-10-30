@@ -81,6 +81,19 @@ Any change to personas, tasks, or scoring bumps the protocol version. Results ar
 1. **Template selection now uses the seed.** Under v0.1 the seed did not enter template selection, so the ≥3 seed replicates re-sent byte-identical prompts. At temperature 0 they would have been near-duplicates, which inflates the apparent sample size without adding information. New rule: `index = (sha256(task_id:turn_slot:persona_id) + seed − 1) mod len(pool)`. Seed 1 is identical to v0.1; seeds 2–6 draw distinct templates. Template text, tasks, scoring, and the §5 analysis plan are unchanged.
 2. **Harness (no protocol effect):** OpenRouter provider, parallel dialogues, `--resume`, and per-turn `finish_reason`, upstream host, and billed cost, so truncations (exclusion rule a) are detectable and runs are costed.
 
+**2026-10-29, pilot configuration (fixed before any pilot data).** Full §4 grid per model: 5 personas × 50 tasks × seeds 1,2,3 = 750 dialogues. All calls go through OpenRouter, each pinned to one upstream host with fallbacks off. `max_tokens` = 8192, covering reasoning and visible output combined.
+
+| Model | Host | Reasoning effort |
+|---|---|---|
+| `anthropic/claude-haiku-5.5` | Anthropic | medium (provider default) |
+| `openai/gpt-6-luna` | OpenAI | medium (provider default) |
+| `deepseek/deepseek-v4.1-flash` | Novita (fp8) | high (provider default; no medium level offered) |
+
+- **Reasoning models:** all three run with reasoning on, so the ≥1 reasoning-model requirement holds for every model.
+- **Temperature:** 0 is sent. Haiku 5.5 and GPT-6 Luna don't accept a temperature parameter, so they sample at their provider default, and seeds act as replicates for them.
+- **Why small models:** budget. A frontier model can be added later as its own within-model comparison. Efficiency comparisons stay within-model only.
+- **Smoke test:** a 90-dialogue run (core × P1/P3/P5 × seed 1 per model) was used only to check cost, truncation, routing, and that reasoning tokens are reported. It was not scored and is excluded from all analysis.
+
 ## Cost model (per full grid)
 
 3 models × 5 personas × 50 tasks × 3 seeds = 2,250 dialogues ≈ 6,750 calls. At short-dialogue sizes (~1.5k in / ~800 out avg): pilot on cheap tiers ≈ **$30–100**; full run with a frontier reasoning model ≈ **$300–800** depending on reasoning-token appetite (that appetite is itself a measured outcome).
