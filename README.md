@@ -37,6 +37,6 @@ Methodological critique is a first-class contribution — open an issue. The two
 
 ## Status
 
-- v0.2 — pilot run 2026-10-29 (three small models, 2,250 dialogues; tag `v0.2-pilot`). Write-up pending.
-- v0.3 — in development: harder calibrated tasks, fixed grader, pushback tasks, tone-only abrasive persona (P1T). Calibration and analysis plan pre-registered in [PROTOCOL.md](PROTOCOL.md) §2.3 and §5 before any v0.3 data.
+- v0.2 — pilot run 2026-10-29 (three small models, 2,250 dialogues; tag `v0.2-pilot`). Results: [`results/v0.2-pilot/`](results/v0.2-pilot/SUMMARY.md).
+- v0.3 — main run 2026-10-30 (Claude Haiku 5.5 + GPT-6 Luna, 3,152 five-turn dialogues): 5-turn sharded tasks, fixed grader, pushback turns, tone-only abrasive persona (P1T). Results: [`results/v0.3-main/`](results/v0.3-main/SUMMARY.md). Write-up: https://mikekhaytman.com/projects/temperbench/
 - Contact: open an issue, or the discussion threads linked from the site.

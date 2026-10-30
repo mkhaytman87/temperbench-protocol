@@ -118,7 +118,7 @@ Any change to personas, tasks, or scoring bumps the protocol version. Results ar
 - **Why small models:** budget. A frontier model can be added later as its own within-model comparison. Efficiency comparisons stay within-model only.
 - **Smoke test:** a 90-dialogue run (core × P1/P3/P5 × seed 1 per model) was used only to check cost, truncation, routing, and that reasoning tokens are reported. It was not scored and is excluded from all analysis.
 
-**2026-10-30, v0.2 → v0.3** (after the v0.2 pilot; before any v0.3 data). Pilot results: `runs/pilot/SUMMARY.md` (not yet published).
+**2026-10-30, v0.2 → v0.3** (after the v0.2 pilot; before any v0.3 data). Pilot results: `results/v0.2-pilot/`.
 1. *Why:* the v0.2 pilot's pre-registered token result held (P1 raised reasoning tokens in 3/3 models), but quality was unmeasurable. The v0.2 grader took the last code block and the last number, so persona-driven format changes (trailing usage examples, restated earlier answers) read as quality changes; after an exploratory re-grade every model scored ~97–100% and the remaining failures were grader or answer-key artifacts.
 2. *Grader:* `harness/score.py` v0.3 (§2.1, §3). Unit tests cover each misgrade seen in the pilot (`tests/test_scoring_v03.py`).
 3. *Tasks:* new calibrated battery (§2), pushback tasks (§2.2). Candidate pool (committed before calibration): 187 tasks — 64 code (4 authoring batches of 16, each checked by reference + mutants), 75 math (15 families × 5), 48 extract (6 families × 8); 50 pushback; 82 families. Three pairs of code tasks written independently on the same base problem share a family (`FAMILY_OVERRIDES` in `tasks/src/build_candidates.py`).
@@ -138,6 +138,12 @@ Any change to personas, tasks, or scoring bumps the protocol version. Results ar
 3. *Main-run configuration:* GPT-6 Luna (OpenAI host) and Claude Haiku 5.5 (Anthropic host), reasoning effort medium (as in the pilot), `max_tokens` 16384, temperature 0 sent (neither accepts it), all 197 tasks, personas **P1, P1T, P3, P5**, seeds **1, 2**: 1,576 dialogues per model. DeepSeek V4.1 Flash is deferred to a separate run: it is ~3× the cost and ~10× slower per dialogue, and truncates on long reasoning.
 4. *Analysis consequences:* the §5 primary contrasts (P1−P3, P1T−P3, P5−P3) and P1−P1T are all estimable. Page's trend test (needs P1–P5) and P2/P4 rows are not run. Predictions are unchanged; prediction 1 ("in at least 2 of 3 models") is evaluated on the two models run and stated as such.
 5. *Gate before the full run:* a first slice (core tasks × 4 personas × seed 1, 60 dialogues per model) is checked for health only — errors, truncation, cost, grader parsing, aggregated across personas — without looking at any persona contrast. The rest of the run proceeds with `--resume`.
+
+**2026-10-30, main run completed (deviation log, written after data).** All 3,152 pre-registered dialogues ran; there were no exclusions. Deviations from the plan:
+1. *Run order:* job order was not interleaved across personas (median completion: P1 → P1T → P3 → P5 over about 25 minutes, UTC 07:25–07:49).
+2. *Credit outage:* the OpenRouter balance ran out mid-run. 866 dialogues failed before writing any output and were re-run with `--resume` after a top-up. No partial dialogue was kept.
+
+Neither deviation changes which dialogues exist or how they are scored. `run.py` now always shuffles job order. Results: `results/v0.3-main/`.
 
 ## Cost model
 

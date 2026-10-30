@@ -391,8 +391,8 @@ def main():
                           "omitted = model default. Recorded in each run file.")
     ap.add_argument("--budget-usd", type=float, default=None, dest="budget_usd",
                      help="stop starting new dialogues once this much has been billed (in-flight "
-                          "dialogues finish); job order is shuffled (seed 0) so a cut-off run "
-                          "covers a random subset rather than the last task file")
+                          "dialogues finish); job order is always shuffled (seed 0), so a "
+                          "cut-off run covers a random subset")
     ap.add_argument("--route", default=None,
                      help="openrouter only: comma list of upstream hosts to pin, no fallbacks "
                           "(e.g. DeepInfra). Recorded in each run file.")
@@ -447,8 +447,11 @@ def main():
                     continue
                 jobs.append((persona_id, task, seed, fpath))
 
-    if args.budget_usd is not None:
-        random.Random(0).shuffle(jobs)
+    # Shuffle job order (fixed seed) so personas are interleaved in time: an interrupted or
+    # budget-capped run then covers a random subset instead of whole personas, and no persona
+    # runs systematically later than another. (Added after the v0.3 main run, which ran in
+    # persona order and was split by a credit outage.)
+    random.Random(0).shuffle(jobs)
     total = len(jobs)
     done = 0
     over_budget = 0
