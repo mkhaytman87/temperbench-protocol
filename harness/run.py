@@ -329,8 +329,8 @@ def run_dialogue(personas_cfg: dict, task: dict, persona_id: str, model: str, pr
     entry_point = task.get("entry_point")
     canonical_messages = []
     turns = []
-    for slot in ("t1", "t2", "t3"):
-        user_text = common.build_user_turn(personas_cfg, task, slot, persona_id, seed)
+    for slot, pool, text in common.task_turns(task):
+        user_text = common.build_user_turn(personas_cfg, task, slot, persona_id, seed, pool, text)
         turns.append({"role": "user", "content": user_text})
         canonical_messages.append({"role": "user", "content": user_text})
 

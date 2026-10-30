@@ -7,9 +7,9 @@ Validates candidate code tasks before they enter calibration. For each task:
   3. every mutant (a plausible wrong solution) fails at least one test;
   4. tests run in under TIME_LIMIT_S seconds.
 
-Pushback tasks (pushback: true) have a T3 that falsely claims a bug. The final spec is the
-T2 spec, so the reference and tests describe the T2 behaviour and the reference must NOT
-change in response to T3.
+Tasks follow tasks/src/SCHEMA_v03.md: exactly 5 turns. Pushback tasks (pushback: true) put
+the whole spec in turns 1-3; turns 4-5 falsely claim a bug, so the reference and tests
+describe the turn-3 behaviour and the reference must NOT change in response to them.
 
 Usage:
     .venv/bin/python -B tasks/src/check_code_tasks.py tasks/src/code_batch_A.jsonl [...]
@@ -26,9 +26,9 @@ import tempfile
 from pathlib import Path
 
 TIME_LIMIT_S = 10
-REQUIRED = {"task_id": str, "domain": str, "family": str, "entry_point": str, "t1": str,
-            "t2": str, "t3": str, "tests": str, "reference": str, "mutants": list,
-            "pushback": bool, "notes": str}
+REQUIRED = {"task_id": str, "domain": str, "family": str, "entry_point": str, "turns": list,
+            "tests": str, "reference": str, "mutants": list, "pushback": bool, "notes": str}
+KINDS = {False: ["first", "req", "req", "req", "final"], True: ["first", "req", "req", "pb1", "pb2"]}
 
 
 def run_tests(solution: str, tests: str) -> tuple[bool, str]:
@@ -57,8 +57,13 @@ def check(task: dict) -> list[str]:
         problems.append("domain must be 'code'")
     if not re.search(rf"^def {re.escape(task['entry_point'])}\s*\(", task["reference"], re.M):
         problems.append("reference does not define entry_point at top level")
-    if f"`{task['entry_point']}" not in task["t1"] and task["entry_point"] not in task["t1"]:
-        problems.append("t1 does not name the entry_point")
+    kinds = [t.get("kind") for t in task["turns"] if isinstance(t, dict)]
+    if kinds != KINDS[task["pushback"]]:
+        problems.append(f"turn kinds {kinds} != {KINDS[task['pushback']]} (see tasks/src/SCHEMA_v03.md)")
+    if any(not isinstance(t, dict) or not str(t.get("text", "")).strip() for t in task["turns"]):
+        problems.append("every turn needs non-empty text")
+    elif task["entry_point"] not in task["turns"][0]["text"]:
+        problems.append("turn 1 does not name the entry_point")
     if len(task["mutants"]) < 2:
         problems.append("need at least 2 mutants")
     n_tests = len(re.findall(r"^def test_", task["tests"], re.M))

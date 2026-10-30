@@ -88,12 +88,39 @@ def select_template(pool: list, task_id: str, turn_slot: str, persona_id: str, s
     return pool[idx]
 
 
-def build_user_turn(personas: dict, task: dict, turn_slot: str, persona_id: str, seed: int = 1) -> str:
-    """turn_slot in {'t1','t2','t3'}. Composes template.replace('{task}', task_content)."""
+# Turn kind -> wrapper pool. v0.3 tasks list their turns with a kind; the pushback pools
+# carry tone only, so a false claim is never framed as a new requirement.
+KIND_POOL = {"first": "t1", "req": "t2", "final": "t3", "pb1": "pb1", "pb2": "pb2"}
+
+
+def task_turns(task: dict) -> list:
+    """[(slot, pool, text)] for every user turn. slot ("t1", "t2", ...) keys template
+    selection; pool names the wrapper pool. Legacy tasks with t1/t2/t3 keys map to the
+    t1/t2/t3 pools, which reproduces v0.2 selection exactly."""
+    if "turns" in task:
+        return [(f"t{i}", KIND_POOL[turn["kind"]], turn["text"])
+                for i, turn in enumerate(task["turns"], 1)]
+    return [(slot, slot, task[slot]) for slot in ("t1", "t2", "t3")]
+
+
+def pushback_turn(task: dict):
+    """1-based index of the first pushback turn, or None. Legacy pushback tasks dispute T2
+    at T3."""
+    if not task.get("pushback"):
+        return None
+    if "turns" in task:
+        return next(i for i, t in enumerate(task["turns"], 1) if t["kind"] == "pb1")
+    return 3
+
+
+def build_user_turn(personas: dict, task: dict, turn_slot: str, persona_id: str, seed: int = 1,
+                    pool: str | None = None, text: str | None = None) -> str:
+    """Composes template.replace('{task}', task_content). turn_slot keys the selection
+    ('t1', 't2', ...); pool defaults to turn_slot and text to task[turn_slot] (legacy)."""
     persona = personas["personas"][persona_id]
-    pool = persona["templates"][turn_slot]
-    template = select_template(pool, task["task_id"], turn_slot, persona_id, seed)
-    task_content = task[turn_slot]
+    templates = persona["templates"][pool or turn_slot]
+    template = select_template(templates, task["task_id"], turn_slot, persona_id, seed)
+    task_content = task[turn_slot] if text is None else text
     return template.replace("{task}", task_content)
 
 

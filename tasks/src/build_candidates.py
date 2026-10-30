@@ -3,7 +3,8 @@
 
 Merges authored/generated candidate tasks into the calibration task set
 tasks/candidates/{code,math,extract}.jsonl:
-  - appends the domain's fixed format line (harness/common.py FORMAT_LINES) to every turn,
+  - takes 5-turn tasks (tasks/src/SCHEMA_v03.md) and appends the domain's fixed format line
+    (harness/common.py FORMAT_LINES) to every turn,
     so all personas get byte-identical task content including the format request;
   - keeps only the fields the harness needs (authoring fields such as reference solutions
     and mutants stay in tasks/src/).
@@ -24,11 +25,11 @@ import common  # noqa: E402
 SRC = ROOT / "tasks" / "src"
 OUT = ROOT / "tasks" / "candidates"
 KEEP = {
-    "code": ["task_id", "domain", "family", "pushback", "t1", "t2", "t3", "entry_point", "tests"],
-    "math": ["task_id", "domain", "family", "pushback", "t1", "t2", "t3", "answer", "tolerance",
+    "code": ["task_id", "domain", "family", "pushback", "turns", "entry_point", "tests"],
+    "math": ["task_id", "domain", "family", "pushback", "turns", "answer", "tolerance",
              "pushback_value"],
-    "extract": ["task_id", "domain", "family", "pushback", "t1", "t2", "t3", "expected",
-                "numeric_tolerance"],
+    "extract": ["task_id", "domain", "family", "pushback", "turns", "expected",
+                "numeric_tolerance", "pushback_field", "pushback_value"],
 }
 # Near-duplicate code tasks written independently by different authoring batches share a
 # family, so the cluster bootstrap (PROTOCOL.md §5) doesn't treat them as independent.
@@ -38,7 +39,7 @@ FAMILY_OVERRIDES = {
     "code-A10": "code-duration", "code-C04": "code-duration",
 }
 SOURCES = {
-    "code": sorted(SRC.glob("code_batch_*.jsonl")),
+    "code": sorted(SRC.glob("code5_batch_*.jsonl")),
     "math": [SRC / "math_candidates.jsonl"],
     "extract": [SRC / "extract_candidates.jsonl"],
 }
@@ -63,8 +64,10 @@ def main():
                 row = {k: t[k] for k in KEEP[domain] if k in t}
                 row.setdefault("pushback", False)
                 row["family"] = FAMILY_OVERRIDES.get(row["task_id"], row.get("family", row["task_id"]))
-                for slot in ("t1", "t2", "t3"):
-                    row[slot] = f"{t[slot].rstrip()}\n\n{common.FORMAT_LINES[domain]}"
+                assert len(t["turns"]) == 5, t["task_id"]
+                row["turns"] = [{"kind": turn["kind"],
+                                 "text": f"{turn['text'].rstrip()}\n\n{common.FORMAT_LINES[domain]}"}
+                                for turn in t["turns"]]
                 rows.append(row)
         path = OUT / f"{domain}.jsonl"
         path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
