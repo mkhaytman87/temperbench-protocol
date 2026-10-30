@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 import platform
+import random
 import sys
 import threading
 import time
@@ -388,6 +389,10 @@ def main():
     ap.add_argument("--reasoning-effort", default=None, dest="reasoning_effort",
                      help="openrouter only: reasoning.effort (e.g. none|low|medium|high); "
                           "omitted = model default. Recorded in each run file.")
+    ap.add_argument("--budget-usd", type=float, default=None, dest="budget_usd",
+                     help="stop starting new dialogues once this much has been billed (in-flight "
+                          "dialogues finish); job order is shuffled (seed 0) so a cut-off run "
+                          "covers a random subset rather than the last task file")
     ap.add_argument("--route", default=None,
                      help="openrouter only: comma list of upstream hosts to pin, no fallbacks "
                           "(e.g. DeepInfra). Recorded in each run file.")
@@ -442,13 +447,20 @@ def main():
                     continue
                 jobs.append((persona_id, task, seed, fpath))
 
+    if args.budget_usd is not None:
+        random.Random(0).shuffle(jobs)
     total = len(jobs)
     done = 0
+    over_budget = 0
     cost_usd = 0.0
     errors = []
     lock = threading.Lock()
 
     def work(persona_id, task, seed, fpath):
+        if args.budget_usd is not None:
+            with lock:
+                if cost_usd >= args.budget_usd:
+                    return None
         record = run_dialogue(
             personas_cfg, task, persona_id, args.model, provider, seed,
             args.temperature, args.max_tokens, args.dry_run,
@@ -472,7 +484,11 @@ def main():
             label = f"{task['task_id']} {persona_id} seed={seed}"
             with lock:
                 try:
-                    cost_usd += fut.result()
+                    spent = fut.result()
+                    if spent is None:
+                        over_budget += 1
+                        continue
+                    cost_usd += spent
                     done += 1
                     status = "OK"
                 except Exception as exc:  # one bad response must not abort a long run
@@ -483,6 +499,9 @@ def main():
 
     cost_note = f", ${cost_usd:.4f} billed" if cost_usd else ""
     print(f"done: {done} dialogues written to {out_dir}, {len(errors)} errors{cost_note}", file=sys.stderr)
+    if over_budget:
+        print(f"budget: stopped at ${args.budget_usd:.2f}; {over_budget} dialogues not started "
+              f"(rerun with --resume to continue)", file=sys.stderr)
     for e in errors:
         print(f"  ERROR: {e}", file=sys.stderr)
     if errors and done == 0:

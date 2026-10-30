@@ -4,14 +4,14 @@
 Applies the pre-registered selection rule (PROTOCOL.md §2.3) to scored calibration runs and
 writes the v0.3 task set to tasks/{code,math,extract}.jsonl.
 
-Calibration = every candidate × persona P3 × seeds 4,5 × each pilot model. Those seeds draw
+Calibration = every candidate × persona P3 × seed 4 (and 5 if run) × each pilot model. Those seeds draw
 P3 wrappers that the main run (seeds 1–3) never uses, so main-run P3 dialogues are fresh
 draws rather than replays of the dialogues that selected the task.
 
-Rule, per candidate task, over its n calibration dialogues (n = 6 for 3 models × 2 seeds):
+Rule, per candidate task, over its n calibration dialogues (n = 3 per seed with 3 models):
   1. drop if listed in tasks/src/calibration_exclusions.json (defective key/spec found while
      reviewing calibration transcripts; P3-only data, so no persona information);
-  2. drop if 2 or more of the n dialogues were truncated (finish_reason "length") —
+  2. drop if at least ceil(n/3) of the n dialogues were truncated (finish_reason "length") —
      truncation-prone tasks would make exclusion rule (a) persona-dependent;
   3. keep if it passed at least once and failed at least once (truncation counts as fail);
   4. if more than MAX_TASKS remain, keep those with pass rate closest to 0.5
@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -76,7 +77,7 @@ def main():
             verdict = f"drop: defect ({excluded[tid]})"
         elif s["n"] == 0:
             verdict = "drop: no calibration data"
-        elif s["trunc"] >= 2:
+        elif s["trunc"] >= max(1, math.ceil(s["n"] / 3)):
             verdict = "drop: truncation-prone"
         elif s["pass"] == 0:
             verdict = "drop: never passed"
